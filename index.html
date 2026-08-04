@@ -80,6 +80,50 @@ h1{font-weight:850;letter-spacing:-.035em;line-height:.96;font-size:clamp(40px,8
 .nowline::before{content:"NOW";position:absolute;top:-15px;left:-14px;font:800 9px var(--mono);color:var(--cyan2);letter-spacing:.1em}
 .board.nowon .nowline{animation:fade .5s ease .2s both}
 
+/* scene 3 · select a job → its detail + workflow (as in the app) */
+.s3wrap{position:relative;display:inline-block}
+.bar.hero{cursor:pointer;transition:box-shadow .3s ease,outline-color .3s ease;outline:2px solid transparent;outline-offset:2px}
+.s3wrap.reveal .board .bar:not(.hero){opacity:.32;transition:opacity .5s ease}
+.s3wrap.reveal .board .grow{border-color:#101a26}
+.s3wrap.reveal .bar.hero{outline-color:var(--cyan2);z-index:6;
+  box-shadow:0 0 0 4px #16b6ef2e,0 0 24px 5px #16b6ef99,inset 0 1px 0 #ffffff45}
+.jobdetail{position:absolute;top:6px;right:0;width:min(376px,44%);text-align:left;z-index:7;
+  background:linear-gradient(180deg,#101d2e,#0a1420);border:1px solid #263c53;border-radius:16px;
+  padding:15px 17px 17px;box-shadow:0 40px 120px #000d,0 0 0 1px #16b6ef22,inset 0 1px 0 #ffffff14;
+  transform:translateX(30px) scale(.985);opacity:0;pointer-events:none;
+  transition:transform .55s var(--ease),opacity .45s ease}
+.s3wrap.reveal .jobdetail{transform:none;opacity:1}
+.jd-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;
+  padding-bottom:12px;border-bottom:1px solid #1b2a3a}
+.jd-no{font-family:var(--mono);font-weight:800;font-size:22px;letter-spacing:.02em;color:#eef4fa}
+.jd-cust{font-size:11px;color:var(--mut);margin-top:2px;max-width:20ch}
+.jd-status{flex:none;font-family:var(--mono);font-weight:700;font-size:9.5px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--amber);background:#2c2411;border:1px solid #5a4a1e;
+  padding:4px 9px;border-radius:99px;white-space:nowrap}
+.jd-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin:12px 0 4px}
+.jd-meta div{display:flex;flex-direction:column;gap:1px}
+.jd-meta span{font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+.jd-meta b{font-size:12px;color:#d3e0ec;font-weight:700}
+.jd-wf-h{font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--cyan2);
+  margin:14px 0 6px;display:flex;align-items:center;gap:8px}
+.jd-wf-h::after{content:"";flex:1;height:1px;background:#1b2a3a}
+.jd-wf{list-style:none;position:relative}
+.jd-wf::before{content:"";position:absolute;left:5px;top:10px;bottom:12px;width:2px;background:#1d3047}
+.jd-wf li{position:relative;display:grid;grid-template-columns:20px 1fr;align-items:start;padding:4px 0}
+.jd-wf li>i{width:12px;height:12px;margin-top:2px;border-radius:50%;background:#0b1622;
+  border:2px solid #2b415a;box-shadow:0 0 0 3px #0d1826}
+.jd-wf li.done>i{background:var(--green);border-color:var(--green)}
+.jd-wf li.run>i{background:var(--cyan);border-color:var(--cyan2);animation:jdpulse 1.5s ease infinite}
+@keyframes jdpulse{0%,100%{box-shadow:0 0 0 3px #0d1826,0 0 0 0 #16b6ef77}55%{box-shadow:0 0 0 3px #0d1826,0 0 0 7px #16b6ef00}}
+.jd-wf li b{display:block;font-size:12px;font-weight:700;color:#c8d6e4;line-height:1.15}
+.jd-wf li span{display:block;font-family:var(--mono);font-size:9px;letter-spacing:.03em;color:var(--faint);margin-top:1px}
+.jd-wf li.done b{color:#bfe9d5}.jd-wf li.run b{color:var(--cyan2)}
+.jobdetail .jd-wf li{opacity:0;transform:translateY(7px)}
+.s3wrap.reveal .jd-wf li{animation:jdrise .5s var(--ease) both;animation-delay:calc(.45s + var(--si,0)*.06s)}
+@keyframes jdrise{to{opacity:1;transform:none}}
+@media (max-width:720px){.jobdetail{position:static;width:auto;margin-top:14px;transform:translateY(20px)}
+  .s3wrap.reveal .jobdetail{transform:none}}
+
 /* small feature visuals */
 .card{background:linear-gradient(180deg,#0f1a29,#0b1421);border:1px solid var(--line);border-radius:16px;
   padding:18px 20px;box-shadow:0 30px 90px #000a;min-width:300px;text-align:left}
@@ -182,10 +226,40 @@ h1{font-weight:850;letter-spacing:-.035em;line-height:.96;font-size:clamp(40px,8
     </div>
   </section>
 
-  <!-- 3 · board reveal -->
+  <!-- 3 · board reveal + select a job → its detail & workflow -->
   <section class="scene" id="s3">
-    <div class="eyebrow fade" style="margin-bottom:16px">Meet the Scheduler</div>
-    <div class="boardslot" data-board></div>
+    <div class="eyebrow fade" style="margin-bottom:16px">Meet the Scheduler · open any job</div>
+    <div class="s3wrap">
+      <div class="boardslot" data-board></div>
+      <aside class="jobdetail" id="s3detail">
+        <div class="jd-top">
+          <div>
+            <div class="jd-no">86425</div>
+            <div class="jd-cust">Cantina Verde · “Rosso” front label</div>
+          </div>
+          <span class="jd-status">◐ In printing</span>
+        </div>
+        <div class="jd-meta">
+          <div><span>Substrate</span><b>Chromo 75</b></div>
+          <div><span>Die no.</span><b>D-2140</b></div>
+          <div><span>Web width</span><b>250 mm</b></div>
+          <div><span>Label size</span><b>92 × 45 mm</b></div>
+          <div><span>Quantity</span><b>48 000</b></div>
+          <div><span>Due</span><b>Aug 6 · 14:00</b></div>
+        </div>
+        <div class="jd-wf-h">Workflow · routing</div>
+        <ol class="jd-wf">
+          <li class="done" style="--si:0"><i></i><div><b>Prepress · plates</b><span>Platemaking · done 09:12</span></div></li>
+          <li class="run" style="--si:1"><i></i><div><b>Printing</b><span>Press 1 · flexo · running</span></div></li>
+          <li style="--si:2"><i></i><div><b>Cold foil</b><span>Leafing · queued 15:40</span></div></li>
+          <li style="--si:3"><i></i><div><b>Varnish</b><span>Varnish · queued</span></div></li>
+          <li style="--si:4"><i></i><div><b>Die cutting</b><span>Die cutting · queued</span></div></li>
+          <li style="--si:5"><i></i><div><b>Inspection</b><span>Camera · 100% AOI · queued</span></div></li>
+          <li style="--si:6"><i></i><div><b>Slitting</b><span>Slitting · queued</span></div></li>
+          <li style="--si:7"><i></i><div><b>Sort &amp; dispatch</b><span>Sorting · queued</span></div></li>
+        </ol>
+      </aside>
+    </div>
   </section>
 
   <!-- 4 · auto-plan: drag jobs → commit → the board re-flows -->
@@ -290,6 +364,10 @@ function boardHTML(){
   let rows="";
   MACH.forEach((m,ri)=>{
     let bars=""; let x=2+rr()*6;
+    if(ri===0){ // the job the detail drawer is about, on Press 1
+      bars+=`<div class="bar hero" data-hero style="left:4%;width:19%;background:${grad(HUE[0])};--bd:.22s">86425</div>`;
+      x=27+rr()*4;
+    }
     const n=1+Math.floor(rr()*3);
     for(let k=0;k<n && x<86;k++){
       const w=8+rr()*20, g=Math.floor(rr()*5), lab= x<40&&w>13?("86"+(200+Math.floor(rr()*400))):"";
@@ -379,7 +457,7 @@ function runS4(){
   f(0,0);f(0,N-7);f(N-7,0);})();
 
 // ── scene timeline ──────────────────────────────────────────────────────────
-const SCENES=[["s1",3400],["s2",3600],["s3",5000],["s4",7600],["s5",5000],
+const SCENES=[["s1",3400],["s2",3600],["s3",7600],["s4",7600],["s5",5000],
   ["s6",4400],["s7",4400],["s8",4800],["s9",4600]];
 const TOTAL=SCENES.reduce((a,s)=>a+s[1],0);
 $("#clock").textContent=`0:00 / ${fmt(TOTAL)}`;
@@ -394,7 +472,11 @@ function enter(n){
   // trigger board bar/sweep animations
   const bd=el.querySelector(".board");
   if(bd){bd.classList.remove("run","plan","nowon");void bd.offsetWidth;bd.classList.add("run");
-    if(el.id==="s3"){setTimeout(()=>bd.classList.add("plan"),400);}}
+    if(el.id==="s3"){
+      const wrap=el.querySelector(".s3wrap"); if(wrap)wrap.classList.remove("reveal");
+      setTimeout(()=>bd.classList.add("plan"),400);
+      setTimeout(()=>{if(wrap && cur===n)wrap.classList.add("reveal");},1900);
+    }}
   if(el.id==="s4")runS4();
   segs.forEach((s,k)=>{s.classList.toggle("done",k<n);s.querySelector("i").style.width=k<n?"100%":"0";});
   cur=n;
