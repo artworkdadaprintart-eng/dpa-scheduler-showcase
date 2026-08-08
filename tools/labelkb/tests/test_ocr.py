@@ -69,11 +69,15 @@ class TestReading:
 
 class TestMeasurement:
     def test_brand_height_in_mm(self, label):
-        """14 pt caps-only: cap height ~3.5 mm; the OCR box lands just above it."""
+        """14 pt caps-only: cap height ~3.5 mm, nominal em 4.94 mm. The OCR box
+        lands between the two; detector padding differs between the legacy and
+        current rapidocr packages (3.98 vs 4.83 mm on this fixture), so the
+        band covers both — anything inside it converts to sane compliance
+        measurements via CAP_HEIGHT_FACTOR."""
         render, result = label
         brand = result.lines[0]
         measured = brand.height_px / render.px_per_mm
-        assert 3.0 < measured < 4.8, f"measured {measured:.2f} mm"
+        assert 3.0 < measured < 5.0, f"measured {measured:.2f} mm"
 
     def test_prominence_ratio_survives_measurement(self, label):
         """Brand (14 pt) vs generic (6 pt): the ratio compliance turns on.

@@ -157,7 +157,20 @@ def group_lines(boxes: list[TextBox]) -> list[Line]:
 
 class OcrEngine:
     """RapidOCR wrapper. Lazy: the ONNX models load on first use, not import,
-    so the base install (no [ocr] extra) can still import this module."""
+    so the base install (no [ocr] extra) can still import this module.
+
+    Two upstream packages exist and their APIs differ:
+
+    * ``rapidocr`` (current; the only one published for Python 3.13+):
+      ``engine(path)`` returns a ``RapidOCROutput`` object with ``.boxes``
+      (N×4×2 array or None), ``.txts`` and ``.scores``. Needs ``onnxruntime``
+      installed separately.
+    * ``rapidocr_onnxruntime`` (legacy, Python ≤3.12): ``engine(path)``
+      returns ``(list_of[quad, text, score], elapse)``.
+
+    We try the current package first and fall back to the legacy one, and
+    normalise either return shape into the same TextBox list.
+    """
 
     def __init__(self) -> None:
         self._engine = None
@@ -165,20 +178,38 @@ class OcrEngine:
     def _load(self):
         if self._engine is None:
             try:
-                from rapidocr_onnxruntime import RapidOCR
-            except ImportError as exc:  # pragma: no cover - environment specific
-                raise RuntimeError(
-                    "RapidOCR is not installed. Run: pip install -e '.[ocr]'"
-                ) from exc
+                from rapidocr import RapidOCR
+            except ImportError:
+                try:
+                    from rapidocr_onnxruntime import RapidOCR
+                except ImportError as exc:  # pragma: no cover - env specific
+                    raise RuntimeError(
+                        "RapidOCR is not installed. Run: pip install -e '.[ocr]'"
+                    ) from exc
             self._engine = RapidOCR()
         return self._engine
 
+    @staticmethod
+    def _normalise(result) -> list[tuple]:
+        """Either API's output -> [(quad, text, score), ...]."""
+        if isinstance(result, tuple):  # legacy: (detections, elapse)
+            return list(result[0] or [])
+        boxes = getattr(result, "boxes", None)
+        if boxes is None:
+            return []
+        txts = result.txts or ()
+        scores = result.scores or ()
+        return [
+            (quad.tolist(), text, score)
+            for quad, text, score in zip(boxes, txts, scores)
+        ]
+
     def read(self, image_path: str | Path, px_per_mm: float | None = None) -> OcrResult:
         engine = self._load()
-        raw, _ = engine(str(image_path))
+        raw = self._normalise(engine(str(image_path)))
 
         boxes: list[TextBox] = []
-        for quad, text, score in raw or []:
+        for quad, text, score in raw:
             xs = [point[0] for point in quad]
             ys = [point[1] for point in quad]
             text = (text or "").strip()
