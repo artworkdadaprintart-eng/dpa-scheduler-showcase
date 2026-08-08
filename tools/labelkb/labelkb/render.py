@@ -50,14 +50,41 @@ class PageGeometry:
     def matches(self, w_mm: float, h_mm: float, tolerance_mm: float = 1.5) -> bool:
         """Does this page match an expected die size, in either orientation?
 
-        Artwork is routinely built with bleed, and folder names round to whole
-        millimetres, so an exact comparison would reject almost everything.
+        Real production pages are the die *plus bleed*: job 88116's page box
+        measures 32x21 mm around its 30x19 die — 1 mm per side. So a match is
+        either the die itself (folder names round to whole millimetres) or the
+        die grown by a uniform bleed on all sides.
         """
-        pairs = ((self.width_mm, self.height_mm), (self.height_mm, self.width_mm))
-        return any(
-            abs(pw - w_mm) <= tolerance_mm and abs(ph - h_mm) <= tolerance_mm
-            for pw, ph in pairs
-        )
+        return self.bleed_mm(w_mm, h_mm, tolerance_mm) is not None
+
+    def bleed_mm(
+        self, w_mm: float, h_mm: float, tolerance_mm: float = 1.5, max_bleed_mm: float = 3.0
+    ) -> float | None:
+        """Per-side bleed implied by the expected die, or None if no match.
+
+        0.0 means the page IS the die. A positive value means the page is the
+        die grown uniformly — the same excess on both axes, within tolerance —
+        by up to ``max_bleed_mm`` per side. Non-uniform excess is a genuine
+        mismatch, not bleed.
+        """
+        boxes = [(self.width_mm, self.height_mm)]
+        if self.trim_w_mm and self.trim_h_mm:
+            # The TrimBox, when present, is the die itself - check it first.
+            boxes.insert(0, (self.trim_w_mm, self.trim_h_mm))
+        for page_w, page_h in boxes:
+            for die_w, die_h in ((w_mm, h_mm), (h_mm, w_mm)):
+                excess_w = page_w - die_w
+                excess_h = page_h - die_h
+                if abs(excess_w) <= tolerance_mm and abs(excess_h) <= tolerance_mm:
+                    return 0.0
+                uniform = abs(excess_w - excess_h) <= tolerance_mm
+                if (
+                    uniform
+                    and 0 < excess_w <= 2 * max_bleed_mm + tolerance_mm
+                    and 0 < excess_h <= 2 * max_bleed_mm + tolerance_mm
+                ):
+                    return round((excess_w + excess_h) / 4, 2)
+        return None
 
 
 def page_geometry(pdf_path: str | Path, page_index: int = 0) -> PageGeometry:

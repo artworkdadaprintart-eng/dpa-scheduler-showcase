@@ -150,9 +150,16 @@ def cmd_geometry(args) -> int:
         except ValueError:
             print(f"error: --expect must look like 30x19, got {args.expect!r}", file=sys.stderr)
             return 2
-        ok = geometry.matches(w, h)
-        data["matches_expected"] = ok
-        lines.append(f"expected      {w:g} x {h:g} mm -> {'match' if ok else 'MISMATCH'}")
+        bleed = geometry.bleed_mm(w, h)
+        data["matches_expected"] = bleed is not None
+        data["bleed_mm_per_side"] = bleed
+        if bleed is None:
+            verdict = "MISMATCH"
+        elif bleed == 0.0:
+            verdict = "match"
+        else:
+            verdict = f"match (die + ~{bleed:g} mm bleed per side)"
+        lines.append(f"expected      {w:g} x {h:g} mm -> {verdict}")
     _emit(data, args.json, "\n".join(lines))
     return 0
 

@@ -117,3 +117,38 @@ def test_garbage_input_is_survivable():
     """A truncated or non-Esko file must return empty, not raise."""
     assert parse_info(b"").strings == []
     assert isinstance(parse_info(b"\x0f\xff\xff\xff\xff not esko"), EskoInfo)
+
+
+def test_real_sidecar_bytes_decode_big_endian():
+    """Regression pinned to bytes copied verbatim from the genuine job-88116
+    sidecar. The framing is 0F + uint32-BE + UTF-16BE; the earlier
+    little-endian reading is byte-identical on short ASCII strings, passed
+    every synthetic test, and then decoded ZERO strings from the real file
+    on the studio machine. This test fails under that misreading."""
+    import base64
+
+    real_segment = base64.b64decode(
+        # 'Creator' key followed by its value, as Esko wrote them.
+        "QQcAAAAHDwAAAA4AQwByAGUAYQB0AG8AckAFEkEHAAAAIA8AAABAAEEAZABvAGIAZQAg"
+        "AEkAbABsAHUAcwB0AHIAYQB0AG8AcgAgADMAMAAuADEAIAAoAFcAaQBuAGQAbwB3AHMAKQ=="
+    )
+    strings = iter_strings(real_segment)
+    assert strings == ["Creator", "Adobe Illustrator 30.1 (Windows)"]
+
+
+def test_real_long_string_length_prefix():
+    """A 222-byte real value ('G:/My Drive/...pdf', 111 chars): its length
+    field 0x000000DE only reads correctly as uint32-BE after a bare 0F tag."""
+    import base64
+
+    real_segment = base64.b64decode(
+        "QQcAAABvDwAAAN4ARwA6AC8ATQB5ACAARAByAGkAdgBlAC8AQQByAHQAdwBvAHIAawBzAC8A"
+        "UwBtAGEAeQBhAG4AIABIAGUAYQBsAHQAaABjAGEAcgBlAC8AMgAwADIANgAvAEEAVQBHAFUA"
+        "UwBUACAAMgAwADIANgAvADgAOAAxADEANgAgAC0AIABKAEEAUgBPAEQATwBMACAAMQBNAEwA"
+        "IAAzADAAWAAxADkALwA4ADgAMQAxADYAIAAtACAASgBBAFIATwBEAE8ATAAgADEATQBMACAA"
+        "MwAwAFgAMQA5AC4AcABkAGY="
+    )
+    strings = iter_strings(real_segment)
+    assert len(strings) == 1
+    assert strings[0].endswith("88116 - JARODOL 1ML 30X19.pdf")
+    assert strings[0].startswith("G:/My Drive/Artworks/Smayan Healthcare")

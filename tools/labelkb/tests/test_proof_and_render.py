@@ -136,6 +136,27 @@ class TestGeometry:
         assert geometry.matches(19, 30), "orientation must not matter"
         assert not geometry.matches(110, 50)
 
+    def test_uniform_bleed_is_a_match_not_a_mismatch(self, tmp_path):
+        """The real job-88116 page box is 32x21 mm around a 30x19 die - 1 mm
+        bleed per side. That must read as a match with the bleed reported."""
+        geometry = page_geometry(_label_pdf(tmp_path / "bleed.pdf", w_mm=32.0, h_mm=21.0))
+        assert geometry.matches(30, 19)
+        assert geometry.bleed_mm(30, 19) == pytest.approx(1.0, abs=0.05)
+
+    def test_exact_die_reports_zero_bleed(self, tmp_path):
+        geometry = page_geometry(_label_pdf(tmp_path / "label.pdf"))
+        assert geometry.bleed_mm(30, 19) == 0.0
+
+    def test_nonuniform_excess_is_a_real_mismatch(self, tmp_path):
+        """4 mm extra on one axis only is a wrong die, not bleed."""
+        geometry = page_geometry(_label_pdf(tmp_path / "off.pdf", w_mm=34.0, h_mm=19.0))
+        assert geometry.bleed_mm(30, 19) is None
+        assert not geometry.matches(30, 19)
+
+    def test_huge_excess_is_not_bleed(self, tmp_path):
+        geometry = page_geometry(_label_pdf(tmp_path / "big.pdf", w_mm=40.0, h_mm=29.0))
+        assert geometry.bleed_mm(30, 19) is None
+
     def test_pt_to_mm(self):
         assert pt_to_mm(72) == pytest.approx(25.4)
 

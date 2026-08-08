@@ -180,6 +180,37 @@ class TestPrintSpec:
         record, *_ = extracted
         assert record.print_spec.die_w_mm == pytest.approx(DIE_W, abs=0.1)
         assert record.print_spec.die_h_mm == pytest.approx(DIE_H, abs=0.1)
+        assert record.print_spec.bleed_mm == 0.0
+
+    def test_bleed_page_records_folder_die_not_bleed_box(self, tmp_path):
+        """A 32x21 page around a folder-named 30x19 die must record die=30x19
+        with 1 mm bleed - otherwise archetypes key on bleed boxes and split by
+        each customer's bleed convention. This is the real corpus geometry of
+        job 88116."""
+        from labelkb.extract import extract_label
+
+        doc = pymupdf.open()
+        page = doc.new_page(width=32 * MM, height=21 * MM)
+        page.insert_text((3 * MM, 8 * MM), "JARODOL", fontsize=10)
+        pdf = tmp_path / "88117 - JARODOL 1ML 30X19.pdf"
+        doc.save(pdf)
+        doc.close()
+
+        record = extract_label(
+            {
+                "job_no": "88117",
+                "customer": "Smayan Healthcare",
+                "artwork_pdf": str(pdf),
+                "parsed": {"brand": "JARODOL", "die_w_mm": 30.0, "die_h_mm": 19.0},
+            },
+            config=Config(
+                engine_profile="cpu-ocr-only", kb_dir=str(tmp_path / "kb"), render_dpi=300
+            ),
+        )
+        assert record.print_spec.die_w_mm == 30.0
+        assert record.print_spec.die_h_mm == 19.0
+        assert record.print_spec.bleed_mm == pytest.approx(1.0, abs=0.05)
+        assert not record.provenance.notes, "bleed must not raise a mismatch note"
 
     def test_esko_fields_flow_through(self, extracted):
         record, *_ = extracted

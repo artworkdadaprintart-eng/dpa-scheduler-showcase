@@ -6,17 +6,21 @@ otherwise hides: which dieline (.ARD) the artwork was built on, the separation
 list, the ink types, the originating application, and the artwork's path on the
 studio machine. All of it costs ~5 KB to read, versus rendering and looking.
 
-Format, as observed across the corpus
--------------------------------------
+Format, as verified against a real sidecar (job 88116)
+-------------------------------------------------------
 The container is a tagged stream. Strings are framed as::
 
-    0F  <uint32 big-endian byte_length>  <UTF-16LE bytes>
+    0F  <uint32 big-endian byte_length>  <UTF-16BE bytes>
 
-Note the endianness: the length is big-endian even though the payload is
-little-endian UTF-16. A 12-character string frames as ``0F 00 00 00 18``, which
-looks deceptively like a 4-byte tag followed by a little-endian uint16 — that
-misreading works for every string under 256 bytes and then silently drops the
-long ones (paths, embedded references). It is checked by a round-trip test.
+Everything is big-endian — length AND payload. The trap, which produced two
+wrong parsers in a row before a real file settled it: for ASCII text under 256
+bytes, this framing is byte-for-byte identical to "tag ``0F 00 00 00`` +
+uint16-LE length + UTF-16LE payload" (``0F 00 00 00 18 00 46 00 54…`` parses
+cleanly both ways). The interpretations only diverge on strings of 256+ bytes
+and on payload alignment — which is why the misreading passed every synthetic
+test and then decoded nothing from a genuine file. If a future Esko version
+really does emit the little-endian variant, the parser falls back to it when
+the big-endian pass recovers nothing.
 
 Strings arrive in key/value order: a key (``Ink.Names``, ``XMP.Layer.Name``,
 ``Creator``) followed by its value or values. Multi-valued keys are preceded by
@@ -81,13 +85,7 @@ class StringRecord:
     end: int  # offset just past the payload
 
 
-def iter_string_records(data: bytes) -> list[StringRecord]:
-    """Recover the ordered UTF-16LE string table, with byte offsets.
-
-    Empty strings are preserved: they are meaningful positional values (an ink
-    with no assigned type, for instance), so dropping them would silently
-    misalign parallel arrays like ``Ink.Names`` and ``Ink.Types``.
-    """
+def _scan_records(data: bytes, encoding: str) -> list[StringRecord]:
     out: list[StringRecord] = []
     pos = 0
     end = len(data)
@@ -107,7 +105,7 @@ def iter_string_records(data: bytes) -> list[StringRecord]:
             pos = idx + 1
             continue
         try:
-            text = data[start : start + nbytes].decode("utf-16-le")
+            text = data[start : start + nbytes].decode(encoding)
         except UnicodeDecodeError:
             pos = idx + 1
             continue
@@ -119,6 +117,26 @@ def iter_string_records(data: bytes) -> list[StringRecord]:
     return out
 
 
+def iter_string_records(data: bytes) -> list[StringRecord]:
+    """Recover the ordered string table, with byte offsets.
+
+    Big-endian UTF-16 first — verified against a real sidecar (job 88116,
+    which the earlier little-endian reading decoded as zero strings). If the
+    big-endian pass recovers nothing from a non-trivial file, the little-endian
+    variant is tried, in case another Esko version writes it: the two framings
+    are byte-identical on short ASCII strings, so the doubt is real and the
+    fallback costs nothing.
+
+    Empty strings are preserved: they are meaningful positional values (an ink
+    with no assigned type, for instance), so dropping them would silently
+    misalign parallel arrays like ``Ink.Names`` and ``Ink.Types``.
+    """
+    records = _scan_records(data, "utf-16-be")
+    if not records and len(data) > 64:
+        records = _scan_records(data, "utf-16-le")
+    return records
+
+
 def iter_strings(data: bytes) -> list[str]:
     """The ordered string table, without offsets."""
     return [r.text for r in iter_string_records(data)]
@@ -126,7 +144,7 @@ def iter_strings(data: bytes) -> list[str]:
 
 def encode_string(text: str) -> bytes:
     """Frame a string the way Esko does. Used by the round-trip test."""
-    payload = text.encode("utf-16-le")
+    payload = text.encode("utf-16-be")
     return _STRING_TAG + struct.pack(">I", len(payload)) + payload
 
 

@@ -164,8 +164,10 @@ labelkb info ".../88116 - JARODOL 1ML 30X19/.metadata/.88116 - JARODOL 1ML 30X19
 ```
 
 **2. Millimetre calibration.** This is load-bearing: every type-size measurement
-downstream is derived from it, so if the page does not measure 30 × 19 mm,
-stop and fix it before ingesting anything.
+downstream is derived from it. Production pages are the die *plus bleed* —
+job 88116's page box is 32 × 21 mm around its 30 × 19 die — so the expected
+verdict is `match (die + ~1 mm bleed per side)`. A non-uniform excess is a
+genuine mismatch: stop and investigate before ingesting anything.
 
 ```bash
 labelkb geometry ".../88116 - JARODOL 1ML 30X19.pdf" --expect 30x19

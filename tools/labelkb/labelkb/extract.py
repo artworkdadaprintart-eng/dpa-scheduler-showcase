@@ -65,6 +65,7 @@ class Compliance(BaseModel):
 class PrintSpec(BaseModel):
     die_w_mm: Optional[float] = None
     die_h_mm: Optional[float] = None
+    bleed_mm: Optional[float] = None
     dieline_ard: Optional[str] = None
     substrate: Optional[str] = None
     inks: list[str] = Field(default_factory=list)
@@ -188,10 +189,25 @@ def fuse(
             compliance.prominence.generic_mm / compliance.prominence.brand_mm, 3
         )
 
-    # Print spec: deterministic sources only.
+    # Print spec: deterministic sources only. The page box is die PLUS bleed
+    # (real corpus: 32x21 page around a 30x19 die), so when the folder names a
+    # die and the page is that die grown uniformly, the die is the folder's
+    # number and the growth is recorded as bleed — otherwise archetypes would
+    # key on bleed boxes and split by each customer's bleed convention.
     spec = record.print_spec
-    spec.die_w_mm = geometry.width_mm if geometry else parsed.get("die_w_mm")
-    spec.die_h_mm = geometry.height_mm if geometry else parsed.get("die_h_mm")
+    folder_w, folder_h = parsed.get("die_w_mm"), parsed.get("die_h_mm")
+    bleed = (
+        geometry.bleed_mm(folder_w, folder_h)
+        if geometry and folder_w and folder_h
+        else None
+    )
+    if bleed is not None:
+        spec.die_w_mm, spec.die_h_mm = folder_w, folder_h
+        spec.bleed_mm = bleed
+    elif geometry:
+        spec.die_w_mm, spec.die_h_mm = geometry.width_mm, geometry.height_mm
+    else:
+        spec.die_w_mm, spec.die_h_mm = folder_w, folder_h
     if esko:
         spec.dieline_ard = esko.dieline_ard
         spec.inks = esko.ink_names
@@ -204,9 +220,10 @@ def fuse(
             spec.inks = ticket.colours
             spec.colour_count = len([c for c in ticket.colours if c not in ("v",)])
 
-    # Zone map: normalised against the die, heights in mm.
-    die_w = spec.die_w_mm or 1.0
-    die_h = spec.die_h_mm or 1.0
+    # Zone map: normalised against the PAGE box, because that is the space the
+    # render's pixel coordinates live in (it includes bleed). Heights in mm.
+    die_w = (geometry.width_mm if geometry else spec.die_w_mm) or 1.0
+    die_h = (geometry.height_mm if geometry else spec.die_h_mm) or 1.0
     assignments = {a.line_index: a for a in roles.assignments}
     for index, line in enumerate(ocr.lines):
         assignment = assignments.get(index)
