@@ -20,7 +20,7 @@ from . import __version__
 from .config import DEFAULT_RENDER_DPI, Config
 from .corpus.esko_info import parse_info_file
 from .corpus.proof import parse_proof
-from .corpus.walk import build_manifest, iter_job_folders, load_manifest
+from .corpus.walk import iter_job_folders, load_manifest
 from .probe import probe
 from .render import has_extractable_text, page_geometry, render_page
 
@@ -49,12 +49,21 @@ def cmd_walk(args) -> int:
     config = Config.load()
     out = Path(args.out).expanduser() if args.out else config.manifest_path
 
-    if args.dry_run:
-        jobs = list(iter_job_folders(root))
-        count = len(jobs)
-    else:
-        count = build_manifest(root, out)
-        jobs = list(iter_job_folders(root))
+    # One walk, not two: on Google Drive for Desktop the tree is streamed from
+    # the cloud, so every extra pass is minutes, not milliseconds. Progress
+    # goes to stderr so it never pollutes --json output.
+    jobs = []
+    for job in iter_job_folders(root):
+        jobs.append(job)
+        if len(jobs) % 25 == 0:
+            print(f"  ... {len(jobs)} job folders found so far", file=sys.stderr)
+    count = len(jobs)
+
+    if not args.dry_run:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with out.open("w", encoding="utf-8") as handle:
+            for job in jobs:
+                handle.write(json.dumps(job.to_dict(), ensure_ascii=False) + "\n")
 
     customers = Counter(j.customer for j in jobs)
     dies = Counter(
