@@ -20,7 +20,7 @@ from . import __version__
 from .config import DEFAULT_RENDER_DPI, Config
 from .corpus.esko_info import parse_info_file
 from .corpus.proof import parse_proof
-from .corpus.walk import build_manifest, iter_job_folders
+from .corpus.walk import build_manifest, iter_job_folders, load_manifest
 from .probe import probe
 from .render import has_extractable_text, page_geometry, render_page
 
@@ -173,6 +173,114 @@ def cmd_render(args) -> int:
     return 0
 
 
+def cmd_extract(args) -> int:
+    from .extract import run_batch
+
+    config = Config.load()
+    rows = load_manifest(Path(args.manifest) if args.manifest else config.manifest_path)
+    if not rows:
+        print("error: manifest is empty - run `labelkb walk` first", file=sys.stderr)
+        return 2
+    if args.job:
+        rows = [r for r in rows if r["job_no"] in set(args.job)]
+    result = run_batch(rows, config=config, limit=args.limit)
+    lines = [
+        f"extracted   {result['extracted']}",
+        f"skipped     {result['skipped']} (already current)",
+        f"failed      {result['failed']}",
+    ]
+    for failure in result["failures"][:10]:
+        lines.append(f"  !  {failure['job_no']}: {failure['error']}")
+    _emit(result, args.json, "\n".join(lines))
+    return 0 if result["failed"] == 0 else 1
+
+
+def cmd_kb_build(args) -> int:
+    from .kb import build_kb
+
+    summary = build_kb(Config.load())
+    _emit(
+        summary,
+        args.json,
+        "\n".join(
+            [
+                f"records     {summary['records']}",
+                f"generics    {summary['generics']}",
+                f"archetypes  {summary['archetypes']}",
+                f"regimes     {', '.join(summary['regimes']) or '-'}",
+            ]
+        ),
+    )
+    return 0
+
+
+def cmd_lookup(args) -> int:
+    from .kb import lookup_generic
+
+    result = lookup_generic(args.generic, Config.load())
+    if args.json:
+        _emit(result, True, "")
+        return 0
+    status = result["status"]
+    lines = [f"status      {status}"]
+    if status == "exact":
+        profile = result["profile"]
+        lines.append(f"precedents  {profile['n']} approved label(s)")
+        for product in profile["products"][:8]:
+            lines.append(
+                f"  {product['job_no']}  {product['brand'] or '-':20} "
+                f"{product['dosage_form'] or '-':10} {product['die'] or '-':8} "
+                f"{product['customer']}"
+            )
+    elif status == "partial":
+        lines.append("no exact precedent; molecules shared with:")
+        for entry in result["related"]:
+            lines.append(f"  {entry['key']}  (n={entry['n']}, overlap: {', '.join(entry['overlap'])})")
+    else:
+        lines.append("no precedent for this molecule")
+        for entry in result.get("same_form", []):
+            lines.append(f"  same form: {entry['key']} (n={entry['n']})")
+    print("\n".join(lines))
+    return 0
+
+
+def cmd_design(args) -> int:
+    from .design import generate_design
+    from .export import export_design
+
+    config = Config.load()
+    design = generate_design(args.generic, die=args.die, config=config)
+    out_dir = Path(args.out) if args.out else config.kb / "designs"
+    written = export_design(design, out_dir, config=config)
+
+    data = {"design": design.model_dump(), "files": written}
+    lines = [
+        f"generic     {design.generic_display}",
+        f"die         {design.die_w_mm:g} x {design.die_h_mm:g} mm",
+        f"precedent   {design.status} ({', '.join(design.precedent_jobs[:5]) or 'none'})",
+        f"archetype   {design.archetype_key or 'default grid'} (n={design.archetype_n})",
+        f"elements    {len(design.elements)}",
+    ]
+    for item in design.confirm_items:
+        lines.append(f"\n⚠  CONFIRM: {item}")
+    lines.append("")
+    for kind, path in written.items():
+        lines.append(f"{kind:12} {path}")
+    lines.append(f"\n{design.disclaimer}")
+    _emit(data, args.json, "\n".join(lines))
+    return 0
+
+
+def cmd_web(args) -> int:
+    try:
+        from .web.app import main as run_web
+    except ImportError:
+        print("error: web extras not installed - pip install -e '.[web]'", file=sys.stderr)
+        return 2
+    run_web()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="labelkb",
@@ -208,6 +316,23 @@ def build_parser() -> argparse.ArgumentParser:
     render_parser.add_argument(
         "--dpi", type=int, default=DEFAULT_RENDER_DPI, help=f"default {DEFAULT_RENDER_DPI}"
     )
+
+    extract_parser = add("extract", "run the vision pipeline over the manifest", cmd_extract)
+    extract_parser.add_argument("--manifest", help="default: <kb>/jobs.jsonl")
+    extract_parser.add_argument("--limit", type=int, help="stop after N new extractions")
+    extract_parser.add_argument("--job", action="append", help="only these job numbers")
+
+    add("kb-build", "aggregate records into the knowledge base", cmd_kb_build)
+
+    lookup_parser = add("lookup", "what the corpus knows about a generic", cmd_lookup)
+    lookup_parser.add_argument("generic", help='e.g. "pantoprazole 40mg injection"')
+
+    design_parser = add("design", "CREATE a label design draft for a generic", cmd_design)
+    design_parser.add_argument("generic", help='e.g. "diclofenac 25mg injection"')
+    design_parser.add_argument("--die", help="die size WxH in mm, e.g. 30x19")
+    design_parser.add_argument("--out", help="output directory (default: <kb>/designs)")
+
+    add("web", "run the local web app (127.0.0.1:8377)", cmd_web)
     return parser
 
 

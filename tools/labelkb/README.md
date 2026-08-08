@@ -1,8 +1,14 @@
 # labelkb
 
-A local tool that reads Dada Print Art's approved label artwork, builds a
-knowledge base from it, and — eventually — produces a compliance spec and
-layout brief for a new product given its generic name.
+A local tool that **sees** Dada Print Art's approved label artwork, **learns**
+from it, and **creates new label designs** from a generic name:
+
+```bash
+labelkb design "pantoprazole 40mg injection" --die 34x25
+# -> SVG + PDF draft at true die size, every mandatory element placed in its
+#    learned zone at its learned size, statutory wording verbatim from
+#    approved precedent, plus a brief justifying each element with job numbers
+```
 
 Every artwork in the corpus was signed off by a customer's regulatory function
 and, for drug products, cleared the drug department. So the corpus is evidence:
@@ -12,10 +18,6 @@ something on disk that can be queried, corrected, and cited.
 
 ## Status
 
-The **deterministic layer is complete and tested** — corpus discovery, Esko
-sidecar decoding, proof-ticket reading, rendering and measurement. This is the
-foundation the vision pipeline sits on, and it needs no GPU and no ML.
-
 | Stage | State |
 |---|---|
 | Corpus walk / job manifest | done |
@@ -23,10 +25,55 @@ foundation the vision pipeline sits on, and it needs no GPU and no ML.
 | Proof job-ticket extraction | done |
 | Render + millimetre calibration | done |
 | Hardware probe / engine profile | done |
-| OCR layer | not started |
-| OpenCV layer (red band, boxes, barcode) | not started |
-| VLM role assignment | not started |
-| Knowledge base + brief generation | not started |
+| OCR layer (RapidOCR, boxes → mm) | done |
+| OpenCV layer (red band, ruled boxes, barcode) | done |
+| Role assignment (local VLM via Ollama + rule engine) | done |
+| Extraction fusion → LabelRecord | done |
+| Knowledge base (generics / archetypes / rules-evidence) | done |
+| CREATE: design generator + brief + SVG/PDF/DOCX export | done |
+| Local web app (search, design, review queue) | done |
+| Claude Code skill wrapper | done |
+| Corpus pilot on the studio machine | **next — yours** |
+
+## How LEARN works
+
+Render each artwork at 600 dpi → **OCR reads the type** (pixel boxes convert
+to real millimetres, so type sizes are measurements, not guesses) → **OpenCV
+measures the furniture** (Schedule-H red band, ruled warning boxes, barcode
+zones) → **a local VLM assigns each text line a role** (brand / generic /
+composition / statutory warning / licence / MRP / …) from a closed enum, with
+a keyword rule engine as the CPU-only path, the prior, and the fallback →
+everything fuses with the folder name, proof ticket and Esko sidecar into one
+`LabelRecord` per job, with per-field confidence and provenance.
+
+`kb-build` then aggregates records into three indexes:
+
+- `generics.json` — per-molecule profiles (salt forms collapse to one key,
+  combinations key as sorted `a+b`)
+- `archetypes.json` — median zone map and type-size ratios per
+  (dosage form × die size): what makes a 30×19 injection label look right
+- `rules-evidence.json` — observed regularities with counts and job numbers,
+  e.g. "red band on 43/47 approved Rx labels"
+
+Corrections from the review queue overlay the records (never edit them) and
+double as a labelled dataset if a LoRA fine-tune is ever wanted.
+
+## How CREATE works
+
+`labelkb design "<generic>"` resolves the molecule against `generics.json`
+(exact → precedent products; partial → shared-molecule neighbours, flagged;
+none → same-form neighbours, flagged), picks the die (requested, or the most
+common among precedent), pulls the archetype for that form and die, and places
+every mandatory element into its learned zone at its learned size — statutory
+wording verbatim from precedent, generic type sized by the median
+brand-to-generic ratio, red band only when precedent Rx labels carry it. The
+result renders to SVG and PDF at exact millimetre scale (opens in
+CorelDRAW/Illustrator at die size) with a markdown/DOCX brief citing the
+precedent job for every element.
+
+What it will not do: guess. Schedule status of an unseen molecule, missing
+statutory wording, unconfirmed composition — each becomes a **CONFIRM** item
+printed on the design, in the brief, and in the CLI output.
 
 ## Why it runs locally
 
@@ -67,16 +114,40 @@ source of pain.
 ## Commands
 
 ```bash
-labelkb probe --save                          # what can this machine run?
-labelkb walk --root "G:\My Drive\Artworks" --dry-run
-labelkb walk --root "G:\My Drive\Artworks"    # writes kb/jobs.jsonl
+# once per machine
+labelkb probe --save                          # picks the vision engine profile
+
+# LEARN
+labelkb walk --root "G:\My Drive\Artworks"    # corpus -> kb/jobs.jsonl
+labelkb extract [--limit N] [--job 88116]     # vision pipeline -> kb/labels/
+labelkb kb-build                              # -> generics/archetypes/rules
+
+# ASK and CREATE
+labelkb lookup "pantoprazole 40mg injection"
+labelkb design "pantoprazole 40mg injection" --die 34x25
+labelkb web                                   # 127.0.0.1:8377 - search, design,
+                                              # review queue for corrections
+
+# per-file inspection
 labelkb info  "<job>/.metadata/.<job>.pdf.info"
 labelkb proof "<job>/<job> Artwork for approval.pdf"
 labelkb geometry "<job>/<job>.pdf" --expect 30x19
 labelkb render   "<job>/<job>.pdf" --dpi 600
 ```
 
-All of them take `--json`.
+All of them take `--json`. The Claude Code skill in
+`.claude/skills/label-compliance/` wraps these same commands, so
+"design a label for cefixime 200mg tablet" works conversationally.
+
+## Recommended pilot (before the full corpus)
+
+1. `labelkb probe --save`, install the extras it recommends.
+2. `labelkb walk --root "G:\My Drive\Artworks" --dry-run` — sanity-check counts.
+3. `labelkb extract --limit 50` — about 50 jobs across a few pharma customers.
+4. `labelkb kb-build`, then `labelkb design` for a generic that IS in those 50,
+   and diff the draft element-by-element against the real approved artwork.
+5. Work the review queue (`labelkb web`), re-run `kb-build`, then let
+   `extract` run over the whole corpus.
 
 ## Validating against the real corpus
 
