@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "labelkb"
+version = "0.1.0"
+description = "Local vision tool that learns label-artwork conventions and compliance from an approved-artwork corpus"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pymupdf>=1.24",
+    "pydantic>=2.6",
+]
+
+# Optional stacks are installed per machine, driven by `labelkb probe`.
+# The deterministic layer (walk/info/proof/render) needs none of them.
+[project.optional-dependencies]
+ocr = [
+    "rapidocr-onnxruntime>=1.3",
+    "opencv-python-headless>=4.9",
+    "numpy>=1.26",
+]
+vlm = ["httpx>=0.27"]
+web = ["fastapi>=0.110", "uvicorn>=0.29", "jinja2>=3.1"]
+export = ["python-docx>=1.1"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+labelkb = "labelkb.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["labelkb"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

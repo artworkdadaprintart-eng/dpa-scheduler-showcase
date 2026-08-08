@@ -1,0 +1,38 @@
+# ---------------------------------------------------------------------------
+# Customer data must never reach this repository.
+#
+# This repo is PUBLIC (GitHub Pages is enabled on it). Everything labelkb
+# derives from the artwork corpus — brand names, compositions, manufacturer
+# addresses, manufacturing licence numbers — belongs to Dada Print Art's
+# customers and stays on the machine that generated it.
+#
+# Tool code and rule packs are committed. Extracted data is not.
+# ---------------------------------------------------------------------------
+kb/
+renders/
+tools/labelkb/kb/
+tools/labelkb/renders/
+*.jobs.jsonl
+
+# Artwork and press-source files, wherever they land
+*.pdf
+*.cdr
+*.ai
+*.indd
+*.psd
+*.ard
+*.ARD
+*.info
+
+# ...but the checked-in test fixtures are safe and required by the suite.
+!tools/labelkb/tests/fixtures/*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+dist/
+build/
